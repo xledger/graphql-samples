@@ -11,7 +11,9 @@ Log.Logger = logger;
 try {
     var app = new CommandApp();
     app.Configure(config => {
-        config.AddCommand<MigrateDB>("migrate-db");
+        config.AddCommand<MigrateDB>("db:migrate");
+        config.AddCommand<ResetDB>("db:reset");
+        config.AddCommand<SyncProjects>("projects:sync");
         config.PropagateExceptions();
     });
     return await app.RunAsync(args);

@@ -74,6 +74,11 @@ namespace Webhooks.GraphQL {
                 m[f] = FieldMapping.Boolean;
             }
 
+            var dateTimeFields = new[] { "createdAt", "modifiedAt", "progressDate" };
+            foreach (var f in dateTimeFields) {
+                m[f] = FieldMapping.CET_DateTime;
+            }
+
             FieldMappingByGraphQLFieldName = m;
         }
 
@@ -92,8 +97,6 @@ namespace Webhooks.GraphQL {
         AsyncRetryPolicy GraphQLRetryPolicy { get; }
 
         internal ProjectSyncerState State { get; private set; }
-
-        string? nextCursor;
 
         internal ProjectSyncer(Database db, GraphQLClient graphQlClient, CancellationToken tok) {
             Db = db;
@@ -117,10 +120,11 @@ namespace Webhooks.GraphQL {
                             return TimeSpan.FromHours(2);
                         }
                     },
-                    onRetryAsync: async (ex, _i, delay, _ctx) => {
+                    onRetryAsync: (ex, _i, delay, _ctx) => {
                         Log.Warning("ProjectSyncer GraphQL API exception. \"{m}\" Waiting {delay} to retry", 
                             ex.Message, 
                             delay);
+                        return Task.FromResult(0);
                     });
 
             CancelTok = tok;
@@ -147,7 +151,6 @@ namespace Webhooks.GraphQL {
         async Task Initialize() {
             var syncStatus = await SyncStatus.Fetch(Db, "Project");
             if (syncStatus is null || syncStatus.Type == SyncStatus.SyncType.FullCursorSyncing) {
-                nextCursor = syncStatus?.SyncValue;
                 await FullCursorSync(syncStatus);
                 return;
             }
@@ -161,6 +164,7 @@ namespace Webhooks.GraphQL {
         /// </summary>
         async Task FullCursorSync(SyncStatus? initialSyncStatus) {
             var syncStatus = initialSyncStatus;
+            var nextCursor = initialSyncStatus?.SyncValue;
 
             if (syncStatus is null) {
                 var now = DateTime.UtcNow;
@@ -168,31 +172,38 @@ namespace Webhooks.GraphQL {
                 await syncStatus.SaveAsync(Db);
             }
 
-            while (true) {
+            var shouldContinue = true;
+            while (shouldContinue) {
+                Log.Verbose("Continuing after cursor {c}", nextCursor);
                 var result = await GraphQLRetryPolicy.ExecuteAsync(() =>
                     GraphQlClient.QueryAsync(
                         Queries.ProjectsFullSyncQuery,
                         nextCursor is null
                             ? null
-                            : new Dictionary<string, object?> { ["cursor"] = nextCursor },
+                            : new Dictionary<string, object?> { ["after"] = nextCursor },
                         LinkedCancelTok));
 
                 var processResult = await ProcessQueryResults(result, syncStatus);
-
+                shouldContinue = processResult.ShouldContinue;
+                nextCursor = processResult.NextCursor;
                 if (processResult.ShouldContinue) {
                     await Task.Delay(100, LinkedCancelTok);
-                } else {
-                    break;
                 }
             }
+            Log.Information("Full cursor sync completed");
         }
 
-        record BatchProcessResult(bool ShouldContinue);
+        record BatchProcessResult(bool ShouldContinue, string? NextCursor);
 
         async Task<int> UpsertProjectAsync(SqliteCommand cmd, int xledgerDbId) {
             try {
                 cmd.Parameters.AddWithValue("xledgerDbId", xledgerDbId);
-                cmd.CommandText = "insert into Project(xledgerDbId) values (@xledgerDbId) on conflict do nothing returning id";
+                cmd.CommandText = """
+                    insert into Project(xledgerDbId)
+                    values (@xledgerDbId)
+                    on conflict do nothing
+                    returning id
+                    """;
                 {
                     using var rdr = await cmd.ExecuteReaderAsync(LinkedCancelTok);
                     
@@ -202,7 +213,8 @@ namespace Webhooks.GraphQL {
                 }
 
                 // 'returning' above only returns a value if a record was inserted, updated, or deleted.
-                // We only insert, and don't update on conflict, so execution can flow here.
+                // We only insert, and don't update on conflict, so we may not have got a row (and thus
+                // returned) above.
                 cmd.CommandText = "select id from Project where xledgerDbId = @xledgerDbId";
                 {
                     using var rdr = await cmd.ExecuteReaderAsync(LinkedCancelTok);
@@ -219,12 +231,14 @@ namespace Webhooks.GraphQL {
         async Task<int> UpsertObjectValueAsync(SqliteCommand cmd, int xledgerDbId, string? code) {
             try {
                 cmd.Parameters.AddWithValue("xledgerDbId", xledgerDbId);
-                cmd.Parameters.AddWithValue("code", code);
-                cmd.CommandText = @"insert into ObjectValue(xledgerDbId, code)
-values (@xledgerDbId, @code) 
-on conflict do update
-set code = excluded.code
-returning id";
+                cmd.Parameters.AddWithValue2("code", code);
+                cmd.CommandText = """
+                    insert into ObjectValue(xledgerDbId, code)
+                    values (@xledgerDbId, @code) 
+                    on conflict do update
+                    set code = excluded.code
+                    returning id
+                    """;
                 {
                     using var rdr = await cmd.ExecuteReaderAsync(LinkedCancelTok);
 
@@ -250,7 +264,6 @@ returning id";
             string? cursor = null;
 
             using (var cmd = conn.CreateCommand()) {
-                cmd.CommandText = UpsertProjectQuery.Value;
                 var edges = result.SelectTokens("$.data.projects.edges[*]").ToList();
 
                 var projectsIdsByXledgerDbId = new Dictionary<int, int>();
@@ -263,10 +276,9 @@ returning id";
                     }
 
                     foreach (var projectRefField in ProjectReferenceFields) {
-                        if (node.TryGetValue("mainProject", out var mainProject)
-                        && mainProject is not null) {
+                        if (node["mainProject"] is JObject mainProject) {
                             var xlDbId = mainProject["dbId"]!.ToObject<int>();
-                            if (!projectsIdsByXledgerDbId.TryGetValue(xlDbId, out var id)) {
+                            if (xlDbId != 0 && !projectsIdsByXledgerDbId.TryGetValue(xlDbId, out var id)) {
                                 var projectId = await UpsertProjectAsync(cmd, xlDbId);
                                 projectsIdsByXledgerDbId.Add(xlDbId, projectId);
                             }
@@ -274,9 +286,11 @@ returning id";
                     }
 
                     foreach (var objectValueFieldName in ObjectValueReferenceFields) {
-                        if (node.TryGetValue(objectValueFieldName, out var objectValue)
-                            && objectValue is not null) {
+                        if (node[objectValueFieldName] is JObject objectValue) {
                             var xlDbId = objectValue["dbId"]!.ToObject<int>();
+                            if (xlDbId == 0) {
+                                continue;
+                            }
                             var code = objectValue["code"]?.ToObject<string>();
                             if (!objectValueIdsByXledgerDbId.TryGetValue(xlDbId, out var id)) {
                                 var objectValueId = await UpsertObjectValueAsync(cmd, xlDbId, code);
@@ -286,7 +300,9 @@ returning id";
                     }
                 }
 
-                // Step 2: Create sql parameters to hold values
+                // Step 2: Prepare upsert project command:
+                cmd.CommandText = UpsertProjectQuery.Value;
+                cmd.Parameters.Add(new SqliteParameter("xledgerDbId", SqliteType.Integer));
                 foreach (var f in ProjectReferenceFields.Concat(ObjectValueReferenceFields)) {
                     cmd.Parameters.Add(new SqliteParameter($"{f}Id", SqliteType.Integer));
                 }
@@ -301,25 +317,32 @@ returning id";
                         throw new Exception("Unexpected response shape");
                     }
 
+                    cmd.Parameters["xledgerDbId"].Value = node["dbId"]!.ToObject<int>();
+
                     // Step 3.1 Set parameters with references
                     foreach (var projectRefField in ProjectReferenceFields) {
-                        if (node.TryGetValue(projectRefField, out var mainProject)
-                            && mainProject is not null) {
+                        var sqlParam = cmd.Parameters[$"{projectRefField}Id"];
+
+                        if (node[projectRefField] is JObject mainProject) {
                             var xlDbId = mainProject["dbId"]!.ToObject<int>();
                             var id = projectsIdsByXledgerDbId[xlDbId];
-                            cmd.Parameters[$"{projectRefField}Id"].Value = id;
+                            sqlParam.Value = id != 0
+                                ? id
+                                : Convert.DBNull;
                         } else {
-                            cmd.Parameters[$"{projectRefField}Id"].Value = null;
+                            sqlParam.Value = Convert.DBNull;
                         }
                     }
                     foreach (var objectValueFieldName in ObjectValueReferenceFields) {
-                        if (node.TryGetValue(objectValueFieldName, out var objectValue)
-                            && objectValue is not null) {
+                        var sqlParam = cmd.Parameters[$"{objectValueFieldName}Id"];
+                        if (node[objectValueFieldName] is JObject objectValue) {
                             var xlDbId = objectValue["dbId"]!.ToObject<int>();
                             var id = objectValueIdsByXledgerDbId[xlDbId];
-                            cmd.Parameters[$"{objectValueFieldName}Id"].Value = id;
+                            sqlParam.Value = id != 0
+                                ? id
+                                : Convert.DBNull;
                         } else {
-                            cmd.Parameters[$"{objectValueFieldName}Id"].Value = null;
+                            sqlParam.Value = Convert.DBNull;
                         }
                     }
 
@@ -327,7 +350,7 @@ returning id";
                     foreach ((var f, var mapping) in FieldMappingByGraphQLFieldName) {
                         var v = mapping.ReadValueFromGraphQLNode(node, f);
                         if (v is null) {
-                            cmd.Parameters[f].Value = null;
+                            cmd.Parameters[f].Value = Convert.DBNull;
                         } else {
                             mapping.SetSqlParameter(cmd.Parameters[f], v);
                         }
@@ -337,12 +360,11 @@ returning id";
                     await cmd.ExecuteNonQueryAsync(LinkedCancelTok);
                 }
             }
-            nextCursor = cursor;
             syncStatus.SyncValue = cursor;
             syncStatus.AsOfTime = DateTime.UtcNow;
             await syncStatus.SaveAsync(conn, LinkedCancelTok);
             tx.Commit();
-            return new BatchProcessResult(shouldContinue);
+            return new BatchProcessResult(shouldContinue, cursor);
         }
     }
 }

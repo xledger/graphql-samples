@@ -15,9 +15,7 @@ namespace Webhooks.Commands {
             public required string ConfigFilePath { get; set; }
         }
 
-        public async override Task<int> ExecuteAsync(CommandContext context, Settings settings) {
-            var config = await Config.FromJsonFile(settings.ConfigFilePath);
-
+        internal static async Task RunMigrationsAsync(Config config) {
             var db = new Database(config);
 
             var userVersion = 0;
@@ -35,13 +33,11 @@ namespace Webhooks.Commands {
             Log.Information("Current user_version: {n}", userVersion);
 
             var migrationFiles = MigrationFile.ReadAll();
-            var upToDate = true;
-            
+
             foreach (var f in migrationFiles) {
                 if (f.VersionNumber <= userVersion) {
                     continue;
                 }
-                upToDate = false;
                 var sql = f.Sql;
 
                 Log.Information("Running migration:\n{s}", sql);
@@ -63,6 +59,12 @@ namespace Webhooks.Commands {
             }
 
             Log.Information("Up-to-date with all migrations.");
+        }
+
+        public async override Task<int> ExecuteAsync(CommandContext context, Settings settings) {
+            var config = await Config.FromJsonFile(settings.ConfigFilePath);
+
+            await RunMigrationsAsync(config);
 
             return 0;
         }

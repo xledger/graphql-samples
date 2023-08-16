@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Webhooks.GraphQL {
     static class Queries {
-        const string ProjectsSelection = @"
+        const string ProjectsSelection = """
     edges {
       cursor
       node {
@@ -77,11 +77,14 @@ namespace Webhooks.GraphQL {
           code
         }
       }
-    }";
-        internal const string ProjectsFullSyncQuery = @"query ($after: String) {
-  projects(first: 10000, after: $after) {"
-        + ProjectsSelection
-        + @"\n  }
-    }";
+    }
+    """;
+        internal const string ProjectsFullSyncQuery = """
+            query ($after: String) {
+                projects(first: 1000, after: $after) {
+            """
+        + ProjectsSelection + "\n"
+        + "pageInfo { hasNextPage }\n"
+        + "    }\n}";
     }
 }

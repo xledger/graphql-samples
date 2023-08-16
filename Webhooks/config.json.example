@@ -1,1 +1,5 @@
-{"dbPath": "db.db"}
+{
+  "dbPath": "xl-webhook-example.db",
+  "graphQlToken": "<my-token>",
+  "graphQlEndpoint": "https://www.xledger.net/graphql"
+}

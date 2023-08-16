@@ -68,15 +68,15 @@ where tableName = @tableName";
 VALUES(@tableName, @syncType, @syncValue, @startTime, @asOfTime)
 ON CONFLICT(tableName) DO
 UPDATE SET
-  syncType = excluded.phonenumber
- ,syncValue = excluded.validDate
+  syncType = excluded.syncType
+ ,syncValue = excluded.syncValue
  ,startTime = excluded.startTime
  ,asOfTime = excluded.asOfTime;";
-            cmd.Parameters.AddWithValue("tableName", TableName);
-            cmd.Parameters.AddWithValue("syncType", Type.ToString());
-            cmd.Parameters.AddWithValue("syncValue", SyncValue);
-            cmd.Parameters.AddWithValue("startTime", Dates.DateTimeToJulian(StartTime));
-            cmd.Parameters.AddWithValue("asOfTime", Dates.DateTimeToJulian(AsOfTime));
+            cmd.Parameters.AddWithValue2("tableName", TableName);
+            cmd.Parameters.AddWithValue2("syncType", Type.ToString());
+            cmd.Parameters.AddWithValue2("syncValue", SyncValue ?? Convert.DBNull);
+            cmd.Parameters.AddWithValue2("startTime", Dates.DateTimeToJulian(StartTime));
+            cmd.Parameters.AddWithValue2("asOfTime", Dates.DateTimeToJulian(AsOfTime));
             await cmd.ExecuteNonQueryAsync(tok);
         }
 

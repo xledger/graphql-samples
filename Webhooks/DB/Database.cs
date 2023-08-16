@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 
 namespace Webhooks.DB {
     class Database {
+        const int SQLITE_CACHE_SIZE_KB = 60000; // The Sqlite default is just 2000.
         string ConnectionString { get; init; }
 
         static Database() {
@@ -27,10 +28,24 @@ namespace Webhooks.DB {
         internal async Task<SqliteConnection> GetOpenConnection(CancellationToken tok = default) {
             var conn = new SqliteConnection(ConnectionString);
             await conn.OpenAsync(tok);
+
+            // https://www.sqlite.org/pragma.html#pragma_journal_mode
+            await ExecPragmaAsync(conn, "PRAGMA journal_mode=WAL;", tok);
+            
+            // https://www.sqlite.org/pragma.html#pragma_cache_size
+            //                                     See link ^ for why this is negative
+            await ExecPragmaAsync(conn, $"PRAGMA cache_size = -{SQLITE_CACHE_SIZE_KB};", tok);
+
             return conn;
         }
 
-        internal async Task Exec(string sql, Dictionary<string, object>? parameters = null) {
+        internal async Task ExecPragmaAsync(SqliteConnection conn, string pragmaCall, CancellationToken tok = default) {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = pragmaCall;
+            using (await cmd.ExecuteReaderAsync(tok)) { }
+        }
+
+        internal async Task ExecAsync(string sql, Dictionary<string, object>? parameters = null) {
             using var conn = await GetOpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = sql;
@@ -50,23 +65,6 @@ namespace Webhooks.DB {
                 ? Convert.ToInt32(ret)
                 : null;
         }
-
-        //internal enum SqlitePragma {
-        //    SCHEMA_USER_VERSION = 1
-        //}
-
-
-
-        //internal async Task<object?> QueryPragma(SqlitePragma pragma) {
-        //    using var conn = await GetOpenConnection();
-        //    using var cmd = conn.CreateCommand();
-        //    cmd.CommandText = $"PRAGMA {pragma};";
-
-        //    using var rdr = await cmd.ExecuteReaderAsync();
-        //    return rdr.Read()
-        //        ? rdr.GetValue(0)
-        //        : null;
-        //}
 
         void AddParameters(SqliteCommand cmd, Dictionary<string, object>? parameters) {
             if (parameters is not null) {
