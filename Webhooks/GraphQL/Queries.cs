@@ -79,7 +79,15 @@ namespace Webhooks.GraphQL {
     """;
         internal const string ProjectsFullSyncQuery = """
             query ($after: String) {
-                projects(first: 1000, after: $after) {
+                projects(first: 10000, after: $after) {
+            """
+        + ProjectsSelection + "\n"
+        + "pageInfo { hasNextPage }\n"
+        + "    }\n}";
+
+        internal const string ProjectsLatestChangesSyncQuery = """
+            query ($after: String, $since: DateTimeString) {
+                projects(first: 10000, after: $after, filter: { modifiedAt_gte: $since }) {
             """
         + ProjectsSelection + "\n"
         + "pageInfo { hasNextPage }\n"

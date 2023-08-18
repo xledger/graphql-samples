@@ -10,6 +10,7 @@ using Polly;
 using Polly.Retry;
 using Newtonsoft.Json.Linq;
 using Microsoft.Data.Sqlite;
+using Webhooks.Utils;
 
 namespace Webhooks.GraphQL {
     /// <summary>
@@ -190,7 +191,58 @@ namespace Webhooks.GraphQL {
                     await Task.Delay(100, LinkedCancelTok);
                 }
             }
-            Log.Information("Full cursor sync completed");
+            Log.Information("Full cursor sync completed.");
+
+            await IncrementalSync(syncStatus);
+        }
+
+        public async Task IncrementalSync(SyncStatus syncStatus) {
+            await StartWebhook();
+
+            var syncModifiedAtSince = syncStatus.StartTime;
+
+            // To compensate for the possibility that this computer's clock is out of sync
+            syncModifiedAtSince = syncModifiedAtSince.Subtract(TimeSpan.FromMinutes(15));
+
+            syncModifiedAtSince = Dates.UtcToCET(syncModifiedAtSince); // The Xledger modifiedAt datetimes are stored in CET
+
+            string? nextCursor = null;
+            var shouldContinue = true;
+            while (shouldContinue) {
+                Log.Verbose("Continuing after cursor {c}", nextCursor);
+                var result = await GraphQLRetryPolicy.ExecuteAsync(() =>
+                    GraphQlClient.QueryAsync(
+                        Queries.ProjectsFullSyncQuery,
+                        nextCursor is null
+                            ? null
+                            : new Dictionary<string, object?> { 
+                                ["after"] = nextCursor,
+                                ["since"] = syncModifiedAtSince.ToString(Dates.ISO_8601_DateTimeFormat)
+                            },
+                        LinkedCancelTok));
+
+                var processResult = await ProcessQueryResults(result, syncStatus);
+                shouldContinue = processResult.ShouldContinue;
+                nextCursor = processResult.NextCursor;
+                if (processResult.ShouldContinue) {
+                    await Task.Delay(100, LinkedCancelTok);
+                }
+            }
+
+            Log.Information("Fetching latest changes");
+            syncStatus.Type = SyncStatus.SyncType.WebhookListening;
+            var now = DateTime.UtcNow;
+            syncStatus.StartTime = now;
+            syncStatus.AsOfTime = now;
+            await syncStatus.SaveAsync(Db, LinkedCancelTok);
+
+            // Keep running until we are cancelled.
+            await Task.Delay(Timeout.InfiniteTimeSpan,  LinkedCancelTok);
+        }
+
+        async Task StartWebhook() {
+            Log.Information("Starting/resuming webhook...");
+            Log.Information("Webhook running...");
         }
 
         record BatchProcessResult(bool ShouldContinue, string? NextCursor);

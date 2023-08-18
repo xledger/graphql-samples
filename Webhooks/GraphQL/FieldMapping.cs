@@ -100,9 +100,6 @@ namespace Webhooks.GraphQL {
             paramSetter: (p, v) => p.Value = Dates.DateToJulian((DateTime)v)
         );
 
-        static readonly TimeZoneInfo CETZone =
-            TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
-
         internal static readonly FieldMapping CET_DateTime = new(
             name: nameof(CET_DateTime),
             sqliteType: SqliteType.Real,
@@ -111,8 +108,8 @@ namespace Webhooks.GraphQL {
                 if (s is null) {
                     return null;
                 }
-                var dt = System.DateTime.ParseExact(s, "yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture);
-                return TimeZoneInfo.ConvertTimeToUtc(dt, CETZone);
+                var dt = System.DateTime.ParseExact(s, Dates.ISO_8601_DateTimeFormat, CultureInfo.InvariantCulture);
+                return TimeZoneInfo.ConvertTimeToUtc(dt, Dates.CETZone);
             },
             paramSetter: (p, v) => p.Value = Dates.DateTimeToJulian((DateTime)v)
         );
@@ -125,7 +122,7 @@ namespace Webhooks.GraphQL {
                 if (s is null) {
                     return null;
                 }
-                return System.DateTime.ParseExact(s, "yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture);
+                return System.DateTime.ParseExact(s, Dates.ISO_8601_DateTimeFormat, CultureInfo.InvariantCulture);
             },
             paramSetter: (p, v) => p.Value = Dates.DateTimeToJulian((DateTime)v)
         );

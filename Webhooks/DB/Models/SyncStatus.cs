@@ -11,9 +11,8 @@ namespace Webhooks.DB.Models {
     class SyncStatus {
         internal enum SyncType {
             None = 0,
-            FullCursorSyncing = 1,
-            LatestChangesSyncing = 2,
-            WebhookListening = 3
+            QuerySyncing = 1,
+            WebhookListening = 2
         }
 
         internal string TableName { get; }
