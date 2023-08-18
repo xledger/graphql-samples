@@ -16,3 +16,13 @@ dotnet run -- db:migrate config.json
 ```powershell
 dotnet run -- projects:sync config.json
 ```
+
+# Project Goals
+
+- Demonstrate best practices for syncing with webhooks without losing/missing data
+- Be runnable on platforms where .NET 7 is able to run, like windows, mac, linux (not all distros)
+
+# Project Non-goals
+
+- Demonstrate latest Microsoft technology (e.g., ASP.NET, Entity Framework)
+- Demonstrate other advanced techniques (e.g., metaprogramming, code generation, etc)
