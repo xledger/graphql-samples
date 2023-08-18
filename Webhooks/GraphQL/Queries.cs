@@ -52,9 +52,7 @@ namespace Webhooks.GraphQL {
         shortInternalInfo
         xgl {
           dbId
-          objectKind {
-            name
-          }
+          code
         }
         glObject1 {
           dbId
