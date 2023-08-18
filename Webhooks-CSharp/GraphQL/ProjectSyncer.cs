@@ -86,12 +86,12 @@ namespace Webhooks.GraphQL {
         internal enum ProjectSyncerState {
             NotStarted,
             Initializing,
-            FullCursorSyncing,
-            RecentChangesCursorSyncing,
+            CursorSyncing,
+            IncrementallySyncing,
+            WebhookListening
         }
 
         Database Db { get; }
-        CancellationToken CancelTok { get; }
         CancellationTokenSource InternalCts { get; }
         CancellationToken LinkedCancelTok { get; }
         GraphQLClient GraphQlClient { get; }
@@ -128,7 +128,6 @@ namespace Webhooks.GraphQL {
                         return Task.FromResult(0);
                     });
 
-            CancelTok = tok;
             State = ProjectSyncerState.NotStarted;
             InternalCts = new();
             LinkedCancelTok = CancellationTokenSource.CreateLinkedTokenSource(InternalCts.Token, tok).Token;
@@ -138,7 +137,12 @@ namespace Webhooks.GraphQL {
             try {
                 State = ProjectSyncerState.Initializing;
                 Log.Information("ProjectSyncer: Initializing");
-                await Initialize();
+                var syncStatus = await SyncStatus.FetchAsync(Db, "Project");
+                if (syncStatus is not null && syncStatus.Type == SyncStatus.SyncType.WebhookListening) {
+                    await IncrementalSync(syncStatus);
+                } else {
+                    await FullCursorSync(syncStatus);
+                }
             } catch (OperationCanceledException) {
                 Log.Information("ProjectSyncer: Cancelled. Shutting down.");
             } catch (Exception ex) {
@@ -149,27 +153,17 @@ namespace Webhooks.GraphQL {
             }
         }
 
-        async Task Initialize() {
-            var syncStatus = await SyncStatus.Fetch(Db, "Project");
-            if (syncStatus is null || syncStatus.Type == SyncStatus.SyncType.FullCursorSyncing) {
-                await FullCursorSync(syncStatus);
-                return;
-            }
-            if (syncStatus is not null) {
-
-            }
-        }
-
         /// <summary>
         /// See Step 1 of the class documentation.
         /// </summary>
         async Task FullCursorSync(SyncStatus? initialSyncStatus) {
+            State = ProjectSyncerState.CursorSyncing;
             var syncStatus = initialSyncStatus;
             var nextCursor = initialSyncStatus?.SyncValue;
 
             if (syncStatus is null) {
                 var now = DateTime.UtcNow;
-                syncStatus = new SyncStatus("Project", SyncStatus.SyncType.FullCursorSyncing, nextCursor, now, now);
+                syncStatus = new SyncStatus("Project", SyncStatus.SyncType.QuerySyncing, nextCursor, now, now);
                 await syncStatus.SaveAsync(Db);
             }
 
@@ -197,9 +191,13 @@ namespace Webhooks.GraphQL {
         }
 
         public async Task IncrementalSync(SyncStatus syncStatus) {
-            await StartWebhook();
+            State = ProjectSyncerState.IncrementallySyncing;
+            await StartWebhookAsync();
 
-            var syncModifiedAtSince = syncStatus.StartTime;
+            var syncModifiedAtSince = 
+                syncStatus.Type == SyncStatus.SyncType.WebhookListening 
+                ? syncStatus.AsOfTime
+                : syncStatus.StartTime;
 
             // To compensate for the possibility that this computer's clock is out of sync
             syncModifiedAtSince = syncModifiedAtSince.Subtract(TimeSpan.FromMinutes(15));
@@ -234,14 +232,31 @@ namespace Webhooks.GraphQL {
             var now = DateTime.UtcNow;
             syncStatus.StartTime = now;
             syncStatus.AsOfTime = now;
+            State = ProjectSyncerState.IncrementallySyncing;
             await syncStatus.SaveAsync(Db, LinkedCancelTok);
+
 
             // Keep running until we are cancelled.
             await Task.Delay(Timeout.InfiniteTimeSpan,  LinkedCancelTok);
         }
 
-        async Task StartWebhook() {
+        async Task StartWebhookAsync() {
+            _ = Task.Run(async () => {
+                try {
+                    while(true) {
+                        var syncStatus = await SyncStatus.FetchAsync(Db, "Project");
+                        syncStatus!.AsOfTime = DateTime.UtcNow;
+                        await syncStatus.SaveAsync(Db, LinkedCancelTok);
+                        await Task.Delay(TimeSpan.FromMinutes(1));
+                    }
+                } catch (OperationCanceledException) {
+                } catch (Exception ex) {
+                    Log.Fatal("Error saving syncStatus AsOfTime: {ex}", ex);
+                    InternalCts.Cancel();
+                }
+            });
             Log.Information("Starting/resuming webhook...");
+            await Task.Delay(1000);
             Log.Information("Webhook running...");
         }
 

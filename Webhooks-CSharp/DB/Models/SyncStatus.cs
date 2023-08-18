@@ -39,7 +39,7 @@ namespace Webhooks.DB.Models {
             AsOfTime = asOfTime;
         }
 
-        async static internal Task<SyncStatus?> Fetch(Database db, string tableName) {
+        async static internal Task<SyncStatus?> FetchAsync(Database db, string tableName) {
             using var conn = await db.GetOpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"select tableName, syncType, syncValue, startTime, asOfTime
