@@ -397,6 +397,6 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
-Webhooks/xl-webhook-example.db*
-Webhooks/config.json
-Webhooks/Properties/launchSettings.json
+Webhooks-CSharp/xl-webhook-example.db*
+Webhooks-CSharp/config.json
+Webhooks-CSharp/Properties/launchSettings.json
