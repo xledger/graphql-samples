@@ -55,6 +55,7 @@ namespace Webhooks.Commands {
                 } catch (Exception ex) {
                     Log.Error("Error: {ex}", ex);
                     await tx.RollbackAsync();
+                    return;
                 }
             }
 
