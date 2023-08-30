@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Serilog;
-using Spectre.Console.Cli;
+﻿using Spectre.Console.Cli;
 using Webhooks.DB;
 using Webhooks.GraphQL;
 
@@ -23,7 +17,7 @@ namespace Webhooks.Commands {
 
             var cts = new CancellationTokenSource();
             var graphQLClient = new GraphQLClient(config.GraphQLToken, new Uri(config.GraphQLEndpoint));
-            var projectSyncer = new ProjectSyncer(db, graphQLClient, cts.Token);
+            var projectSyncer = new ProjectSyncer(db, graphQLClient, config.UseTunnel, cts.Token);
 
             await projectSyncer.Run();
 

@@ -4,8 +4,11 @@ using Webhooks.Commands;
 
 var logCfg = new LoggerConfiguration();
 logCfg.MinimumLevel.Is(Serilog.Events.LogEventLevel.Verbose);
+logCfg.MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning);
+logCfg.MinimumLevel.Override("Microsoft.AspNetCore.HttpLogging.HttpLoggingMiddleware", Serilog.Events.LogEventLevel.Debug);
+logCfg.MinimumLevel.Override("Microsoft.Hosting.Lifetime", Serilog.Events.LogEventLevel.Information);
 logCfg.WriteTo.Console();
-await using var logger = logCfg.CreateLogger();
+using var logger = logCfg.CreateLogger();
 Log.Logger = logger;
 
 try {

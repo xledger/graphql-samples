@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Serilog;
+﻿using Serilog;
 using Spectre.Console.Cli;
 using Webhooks.DB;
 
@@ -64,6 +59,7 @@ namespace Webhooks.Commands {
 
         public async override Task<int> ExecuteAsync(CommandContext context, Settings settings) {
             var config = await Config.FromJsonFile(settings.ConfigFilePath);
+            config.Validate();
 
             await RunMigrationsAsync(config);
 

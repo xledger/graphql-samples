@@ -1,11 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
+﻿using System.Diagnostics;
 using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Webhooks.Utils;
 
 namespace Webhooks.GraphQL {
     class GraphQLClient {
@@ -38,10 +35,8 @@ namespace Webhooks.GraphQL {
             using var stream = await resp.Content.ReadAsStreamAsync(tok);
             using var sr = new StreamReader(stream);
             using var jr = new JsonTextReader(sr);
-            jr.DateParseHandling = DateParseHandling.None;
 
-            var js = new JsonSerializer();
-            var respObject = js.Deserialize<JObject>(jr)!;
+            var respObject = Json.Deserialize<JObject>(jr)!;
 
             foreach (var err in respObject.SelectTokens("$.errors[*]")) {
                 var msg = err["message"]!.ToString();

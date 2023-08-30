@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Microsoft.AspNetCore.WebUtilities;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Webhooks {
     class Config {
@@ -19,6 +14,9 @@ namespace Webhooks {
 
         [JsonProperty(Required = Required.DisallowNull)]
         public required string GraphQLEndpoint { get; set; }
+
+        [JsonProperty]
+        public bool UseTunnel { get; set; }
 
         public static async Task<Config> FromJsonFile(string path) {
             var jsonSettings = new JsonSerializerSettings {
@@ -45,7 +43,12 @@ namespace Webhooks {
             if (string.IsNullOrWhiteSpace(GraphQLToken)) {
                 throw new ApplicationException("graphQLToken cannot be blank");
             }
+
+            var apiTokenBytes = WebEncoders.Base64UrlDecode(GraphQLToken);
+            var apiTokenBase64 = WebEncoders.Base64UrlEncode(apiTokenBytes);
+            if (GraphQLToken != apiTokenBase64) {
+                throw new ApplicationException("graphQLToken could not be successfully round-trip decoded and encoded in base64.");
+            }
         }
-        
     }
 }
