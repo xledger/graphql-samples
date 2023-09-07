@@ -11,7 +11,7 @@ namespace Webhooks.DB.Models {
 
         internal string TableName { get; }
         internal SyncType Type { get; set; }
-        internal string? SyncCursor { get; set; }
+        internal string? SyncValue { get; set; }
         internal DateTime StartTime { get; set; }
         internal DateTime AsOfTime { get; set; }
         internal int? WebhookXledgerDbId { get; set; }
@@ -19,7 +19,7 @@ namespace Webhooks.DB.Models {
         internal SyncStatus(
             string tableName,
             string syncType,
-            string syncCursor,
+            string syncValue,
             double startTime,
             double asOfTime,
             int? webhookXledgerDbId
@@ -27,7 +27,7 @@ namespace Webhooks.DB.Models {
             TableName = tableName;
             Type = Enum.Parse<SyncType>(syncType);
 
-            SyncCursor = syncCursor;
+            SyncValue = syncValue;
             StartTime = Dates.JulianToDateTime(startTime);
             AsOfTime = Dates.JulianToDateTime(asOfTime);
             WebhookXledgerDbId = webhookXledgerDbId;
@@ -36,7 +36,7 @@ namespace Webhooks.DB.Models {
         internal SyncStatus(
             string tableName,
             SyncType syncType,
-            string? syncCursor,
+            string? syncValue,
             DateTime startTime,
             DateTime asOfTime,
             int? webhookXledgerDbId
@@ -44,7 +44,7 @@ namespace Webhooks.DB.Models {
             TableName = tableName;
             Type = syncType;
 
-            SyncCursor = syncCursor;
+            SyncValue = syncValue;
             StartTime = startTime;
             AsOfTime = asOfTime;
             WebhookXledgerDbId = webhookXledgerDbId;
@@ -53,7 +53,7 @@ namespace Webhooks.DB.Models {
         async static internal Task<SyncStatus?> FetchAsync(Database db, string tableName) {
             using var conn = await db.GetOpenConnection();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"select tableName, syncType, syncCursor, startTime, asOfTime, webhookXledgerDbId
+            cmd.CommandText = @"select tableName, syncType, syncValue, startTime, asOfTime, webhookXledgerDbId
 from SyncStatus
 where tableName = @tableName";
             cmd.Parameters.AddWithValue("tableName", tableName);
@@ -79,18 +79,18 @@ where tableName = @tableName";
 
         async internal Task SaveAsync(SqliteConnection conn, CancellationToken tok = default) {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"INSERT INTO SyncStatus(tableName, syncType, syncCursor, startTime, asOfTime, webhookXledgerDbId)
-VALUES(@tableName, @syncType, @syncCursor, @startTime, @asOfTime, @webhookXledgerDbId)
+            cmd.CommandText = @"INSERT INTO SyncStatus(tableName, syncType, syncValue, startTime, asOfTime, webhookXledgerDbId)
+VALUES(@tableName, @syncType, @syncValue, @startTime, @asOfTime, @webhookXledgerDbId)
 ON CONFLICT(tableName) DO
 UPDATE SET
   syncType = excluded.syncType
- ,syncCursor = excluded.syncCursor
+ ,syncValue = excluded.syncValue
  ,startTime = excluded.startTime
  ,asOfTime = excluded.asOfTime
  ,webhookXledgerDbId = excluded.webhookXledgerDbId;";
             cmd.Parameters.AddWithValue2("tableName", TableName);
             cmd.Parameters.AddWithValue2("syncType", Type.ToString());
-            cmd.Parameters.AddWithValue2("syncCursor", SyncCursor);
+            cmd.Parameters.AddWithValue2("syncValue", SyncValue);
             cmd.Parameters.AddWithValue2("startTime", Dates.DateTimeToJulian(StartTime));
             cmd.Parameters.AddWithValue2("asOfTime", Dates.DateTimeToJulian(AsOfTime));
             cmd.Parameters.AddWithValue2("webhookXledgerDbId", WebhookXledgerDbId);

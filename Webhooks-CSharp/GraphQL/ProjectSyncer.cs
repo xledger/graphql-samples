@@ -186,7 +186,7 @@ namespace Webhooks.GraphQL {
         async Task FullCursorSync(SyncStatus? initialSyncStatus) {
             State = ProjectSyncerState.CursorSyncing;
             var syncStatus = initialSyncStatus;
-            var nextCursor = initialSyncStatus?.SyncCursor;
+            var nextCursor = initialSyncStatus?.SyncValue;
 
             if (syncStatus is null) {
                 var now = DateTime.UtcNow;
@@ -551,7 +551,7 @@ namespace Webhooks.GraphQL {
             using var conn = await Db.GetOpenConnection(LinkedCancelTok);
             using var tx = await conn.BeginTransactionAsync(LinkedCancelTok);
             string? cursor = await UpsertProjects(conn, result);
-            syncStatus.SyncCursor = cursor;
+            syncStatus.SyncValue = cursor;
             syncStatus.AsOfTime = DateTime.UtcNow;
             await syncStatus.SaveAsync(conn, LinkedCancelTok);
             tx.Commit();
