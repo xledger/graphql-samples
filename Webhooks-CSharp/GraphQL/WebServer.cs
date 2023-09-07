@@ -11,12 +11,14 @@ namespace Webhooks.GraphQL {
 
         public record Addresses(Uri Http, Uri Https);
 
+        public record WebhookRequest(DateTimeOffset Date, string Signature, string Body);
+
         /// <summary>
         /// Starts a Kestrel web server that listens until cancellation and 
         /// handles all project POSTs with the `handleProjectsMessage` function.
         /// </summary>
         public static Task Fly(
-            Func<string, string, Task<IResult>> handleProjectsMessage,
+            Func<WebhookRequest, Task<IResult>> handleProjectsMessage,
             out Addresses addrs,
             CancellationToken tok
         ) {
@@ -36,11 +38,14 @@ namespace Webhooks.GraphQL {
             app.MapPost("/projects",
                 async (
                     HttpRequest request,
-                    [FromHeader(Name = "X-XL-Webhook-Signature")] string sig
+                    [FromHeader(Name = "X-XL-Webhook-Signature")] string sig,
+                    [FromHeader(Name = "Date")] DateTimeOffset date
                 ) => {
+                    Log.Information("Headers: {H}", request.Headers);
                     using var r = new StreamReader(request.Body);
                     var body = await r.ReadToEndAsync();
-                    return await handleProjectsMessage(sig, body);
+                    var rq = new WebhookRequest(date, sig, body);
+                    return await handleProjectsMessage(rq);
                 });
 
             return Task.Run(() => app.Run(), tok);

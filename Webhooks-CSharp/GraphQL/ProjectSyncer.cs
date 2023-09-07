@@ -17,6 +17,8 @@ using Webhooks.DB.Models;
 using Webhooks.DB;
 using Webhooks.Utils;
 
+using static Webhooks.GraphQL.WebServer;
+
 namespace Webhooks.GraphQL {
     /// <summary>
     /// Sync projects by following this strategy:
@@ -418,52 +420,40 @@ namespace Webhooks.GraphQL {
         /// <param name="sig">The X-XL-Webhook-Signature header value</param>
         /// <param name="body">The request body to verify the signature against</param>
         /// <returns>true if the signature is valid for the given body and recent, false otherwise</returns>
-        bool ValidSignature(string sig, string body) {
+        bool ValidSignature(WebhookRequest rq) {
             bool equal = false, recent = false;
 
             try {
-                var parts = sig
-                    .Trim()
-                    .Split(',')
-                    .Select(item => item.Trim().Split(new[] { '=' }, 2))
-                    .ToLookup(item => item[0], item => item[1]);
-                var t = parts["t"].FirstOrDefault() ?? "";
-                var hmac = parts["hmac"].FirstOrDefault() ?? "";
-
                 // Compare calculated signature with signature in header.
-                var providedBytes = WebEncoders.Base64UrlDecode(hmac);
+                var providedBytes = WebEncoders.Base64UrlDecode(rq.Signature);
 
                 // Calculate signature.
                 var apiToken = GraphQlClient.Token;
                 var apiTokenBytes = WebEncoders.Base64UrlDecode(apiToken);
                 using var hmacAlgo = new HMACSHA256(apiTokenBytes);
-                var bytes = Encoding.UTF8.GetBytes($"{t}.{body}");
+                var bytes = Encoding.UTF8.GetBytes($"{rq.Date.ToUnixTimeSeconds()}.{rq.Body}");
                 var calculatedBytes = hmacAlgo.ComputeHash(bytes);
-
+                
                 // Compare every byte to avoid timing attacks.
-                equal = providedBytes.Length == calculatedBytes.Length;
-                for (int i = 0, n = Math.Min(providedBytes.Length, calculatedBytes.Length); i < n; ++i) {
-                    equal &= providedBytes[i] == calculatedBytes[i];
-                }
+                equal = CryptographicOperations.FixedTimeEquals(providedBytes, calculatedBytes);
 
                 // Ensure timestamp in header is within 15 minutes of now.
-                recent = int.TryParse(t, out var secondsSinceUnixEpoch);
-                var timestamp = DateTime.UnixEpoch.AddSeconds(secondsSinceUnixEpoch);
-                var now = DateTime.UtcNow;
-                recent &= (now - timestamp).Duration() <= TimeSpan.FromMinutes(15);
+                var now = DateTimeOffset.UtcNow;
+                recent = (now - rq.Date).Duration() <= TimeSpan.FromMinutes(15);
             } catch (Exception) {
             }
 
-            return equal & recent;
+            return equal && recent;
         }
 
-        Func<string, string, Task<IResult>> PostProjectHandler(SyncStatus syncStatus) {
-            return async (string sig, string body) => {
+        Func<WebhookRequest, Task<IResult>> PostProjectHandler(SyncStatus syncStatus) {
+            return async (WebhookRequest rq) => {
                 try {
-                    if (!ValidSignature(sig, body)) {
+                    if (!ValidSignature(rq)) {
+                        Log.Warning("Hacker thwarted (Bad request signature).");
                         return Results.Unauthorized();
                     }
-                    var jobj = Json.Deserialize<JObject>(body)!;
+                    var jobj = Json.Deserialize<JObject>(rq.Body)!;
                     var syncVersion = jobj.SelectTokens("$.data.projects.edges[*].syncVersion")
                         .Select(t => t.ToObject<int>())
                         .Max();
