@@ -147,6 +147,21 @@ namespace Webhooks.GraphQL {
             try {
                 State = ProjectSyncerState.Initializing;
                 Log.Information("ProjectSyncer: Initializing");
+
+                if (UseTunnel) {
+                    Log.Warning("Using a tunnel to make localhost available publicly transmits your data through a third-party service that Xledger does not control and is not responsible for. Don't send anything sensitive through this tunnel.");
+                    while (true) {
+                        Log.Warning("Are you certain you want to continue? [y/N]");
+                        var line = Console.ReadLine();
+                        if (string.IsNullOrEmpty(line) || line is "n" or "N") {
+                            InternalCts.Cancel();
+                            throw new DisallowTunnelException();
+                        } else if (line is "y" or "Y") {
+                            break;
+                        }
+                    }
+                }
+
                 var syncStatus = await SyncStatus.FetchAsync(Db, "Project");
                 if (syncStatus is not null && syncStatus.Type == SyncStatus.SyncType.WebhookListening) {
                     await IncrementalSync(syncStatus);
@@ -155,6 +170,8 @@ namespace Webhooks.GraphQL {
                 }
             } catch (OperationCanceledException) {
                 Log.Information("ProjectSyncer: Cancelled. Shutting down.");
+            } catch (DisallowTunnelException) {
+                Log.Information("ProjectSyncer: Rejected use of the tunnel. Shutting down.");
             } catch (Exception ex) {
                 Log.Fatal("ProjectSyncer: Unexpected exception. Shutting down.\n{ex}", ex);
                 throw;
@@ -645,4 +662,6 @@ namespace Webhooks.GraphQL {
             return cursor;
         }
     }
+
+    class DisallowTunnelException : Exception { }
 }
