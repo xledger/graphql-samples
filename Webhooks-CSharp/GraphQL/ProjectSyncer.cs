@@ -18,6 +18,7 @@ using Webhooks.DB;
 using Webhooks.Utils;
 
 namespace Webhooks.GraphQL {
+    using WebApplication = Microsoft.AspNetCore.Builder.WebApplication;
     using WebhookRequest = WebServer.WebhookRequest;
 
     /// <summary>
@@ -108,6 +109,8 @@ namespace Webhooks.GraphQL {
 
         internal ProjectSyncerState State { get; private set; }
 
+        WebApplication? Server { get; set; }
+
         internal ProjectSyncer(Database db, GraphQLClient graphQlClient, Config config, CancellationToken tok) {
             Db = db;
             GraphQlClient = graphQlClient;
@@ -180,6 +183,9 @@ namespace Webhooks.GraphQL {
                 Log.Fatal("ProjectSyncer: Unexpected exception. Shutting down.\n{ex}", ex);
                 throw;
             } finally {
+                if (Server is not null) {
+                    await Server.StopAsync(CancellationToken.None);
+                }
                 InternalCts.Cancel();
             }
         }
@@ -306,7 +312,7 @@ namespace Webhooks.GraphQL {
 
         async Task StartWebhookAsync(SyncStatus syncStatus) {
             // 1. Start listener.
-            _ = WebServer.Fly(PostProjectHandler(syncStatus), Urls, LinkedCancelTok);
+            Server = await WebServer.Fly(PostProjectHandler(syncStatus), Urls, LinkedCancelTok);
 
             // 2. Start tunnel.
             // This step is only needed for local development. In a production

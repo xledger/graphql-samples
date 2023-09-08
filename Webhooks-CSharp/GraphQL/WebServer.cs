@@ -12,7 +12,7 @@ namespace Webhooks.GraphQL {
         /// Starts a Kestrel web server that listens until cancellation and 
         /// handles all project POSTs with the `handleProjectsMessage` function.
         /// </summary>
-        public static Task Fly(
+        public static async Task<WebApplication> Fly(
             Func<WebhookRequest, Task<IResult>> handleProjectsMessage,
             string[] urls,
             CancellationToken tok
@@ -39,7 +39,8 @@ namespace Webhooks.GraphQL {
                     return await handleProjectsMessage(rq);
                 });
 
-            return Task.Run(() => app.Run(), tok);
+            await app.StartAsync(tok);
+            return app;
         }
     }
 }
