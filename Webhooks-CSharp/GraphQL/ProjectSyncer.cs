@@ -435,18 +435,18 @@ namespace Webhooks.GraphQL {
         /// <param name="sig">The X-XL-Webhook-Signature header value</param>
         /// <param name="body">The request body to verify the signature against</param>
         /// <returns>true if the signature is valid for the given body and recent, false otherwise</returns>
-        bool ValidSignature(WebhookRequest rq) {
+        bool ValidSignature(WebhookRequest req) {
             bool equal = false, recent = false;
 
             try {
                 // Compare calculated signature with signature in header.
-                var providedBytes = WebEncoders.Base64UrlDecode(rq.Signature);
+                var providedBytes = WebEncoders.Base64UrlDecode(req.Signature);
 
                 // Calculate signature.
                 var apiToken = GraphQlClient.Token;
                 var apiTokenBytes = WebEncoders.Base64UrlDecode(apiToken);
                 using var hmacAlgo = new HMACSHA256(apiTokenBytes);
-                var bytes = Encoding.UTF8.GetBytes($"{rq.Date.ToUnixTimeSeconds()}.{rq.Body}");
+                var bytes = Encoding.UTF8.GetBytes($"{req.Date.ToUnixTimeSeconds()}.{req.Body}");
                 var calculatedBytes = hmacAlgo.ComputeHash(bytes);
 
                 // Compare every byte to avoid timing attacks.
@@ -454,7 +454,7 @@ namespace Webhooks.GraphQL {
 
                 // Ensure timestamp in header is within 15 minutes of now.
                 var now = DateTimeOffset.UtcNow;
-                recent = (now - rq.Date).Duration() <= TimeSpan.FromMinutes(15);
+                recent = (now - req.Date).Duration() <= TimeSpan.FromMinutes(15);
             } catch (Exception) {
             }
 
@@ -462,13 +462,13 @@ namespace Webhooks.GraphQL {
         }
 
         Func<WebhookRequest, Task<IResult>> PostProjectHandler(SyncStatus syncStatus) {
-            return async (WebhookRequest rq) => {
+            return async (WebhookRequest req) => {
                 try {
-                    if (!ValidSignature(rq)) {
+                    if (!ValidSignature(req)) {
                         Log.Warning("Hacker thwarted (Bad request signature).");
                         return Results.Unauthorized();
                     }
-                    var jobj = Json.Deserialize<JObject>(rq.Body)!;
+                    var jobj = Json.Deserialize<JObject>(req.Body)!;
                     var syncVersion = jobj.SelectTokens("$.data.projects.edges[*].syncVersion")
                         .Select(t => t.ToObject<int>())
                         .Max();

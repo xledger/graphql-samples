@@ -35,8 +35,8 @@ namespace Webhooks.GraphQL {
                     Log.Information("Headers: {H}", request.Headers);
                     using var r = new StreamReader(request.Body);
                     var body = await r.ReadToEndAsync();
-                    var rq = new WebhookRequest(date, sig, body);
-                    return await handleProjectsMessage(rq);
+                    var req = new WebhookRequest(date, sig, body);
+                    return await handleProjectsMessage(req);
                 });
 
             await app.StartAsync(tok);
