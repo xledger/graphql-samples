@@ -357,7 +357,8 @@ namespace Webhooks.GraphQL {
 
             // 5. Poll until new webhook transitions to RUNNING.
             Log.Information("Waiting until webhook {DbId} transitions to RUNNING...", webhookDbId);
-            await PollWebhookState(webhookDbId, new HashSet<string> { "PAUSED", "RECOVERING", "RUNNING" }, TimeSpan.FromSeconds(10));
+            await PollWebhookUntilStateOrFaulted(webhookDbId, TimeSpan.FromSeconds(10),
+                "PAUSED", "RECOVERING", "RUNNING");
 
             // 6. Continually update sync status's AsOfTime.
             _ = Task.Run(async () => {
@@ -377,7 +378,7 @@ namespace Webhooks.GraphQL {
 
             // 7. Poll once per day to ensure webhook isn't FAULTED.
             _ = Task.Run(async () =>
-                await PollWebhookState(webhookDbId, new HashSet<string>(), TimeSpan.FromHours(23)));
+                await PollWebhookUntilStateOrFaulted(webhookDbId, TimeSpan.FromHours(23)));
 
             Log.Information("Webhook {DbId} running.", webhookDbId);
         }
@@ -393,7 +394,8 @@ namespace Webhooks.GraphQL {
             }
         }
 
-        async Task PollWebhookState(int webhookDbId, IReadOnlySet<string> pollUntilStates, TimeSpan delay) {
+        async Task PollWebhookUntilStateOrFaulted(int webhookDbId, TimeSpan delay, params string[] states) {
+            var pollUntilStates = new HashSet<string>(states);
             while (true) {
                 var result = await GraphQLRetryPolicy.ExecuteAsync(() =>
                     GraphQlClient.QueryAsync(
