@@ -105,7 +105,7 @@ namespace Webhooks.GraphQL {
         GraphQLClient GraphQlClient { get; }
         AsyncRetryPolicy GraphQLRetryPolicy { get; }
         string[] Urls { get; }
-        bool UseTunnel { get; }
+        bool UseThirdPartyWebhookDevelopmentTunnel { get; }
 
         internal ProjectSyncerState State { get; private set; }
 
@@ -116,7 +116,7 @@ namespace Webhooks.GraphQL {
             GraphQlClient = graphQlClient;
             InternalCts = new();
             Urls = config.Urls;
-            UseTunnel = config.UseTunnel;
+            UseThirdPartyWebhookDevelopmentTunnel = config.UseThirdPartyWebhookDevelopmentTunnel;
             GraphQLRetryPolicy =
                 Policy.Handle<Exception>(ex => !InternalCts.IsCancellationRequested)
                 .WaitAndRetryAsync(
@@ -155,7 +155,7 @@ namespace Webhooks.GraphQL {
                 State = ProjectSyncerState.Initializing;
                 Log.Information("ProjectSyncer: Initializing");
 
-                if (UseTunnel) {
+                if (UseThirdPartyWebhookDevelopmentTunnel) {
                     Log.Warning("Using a tunnel to make localhost available publicly transmits your data through a third-party service that Xledger does not control and is not responsible for. Don't send anything sensitive through this tunnel.");
                     while (true) {
                         Log.Warning("Are you certain you want to continue? [y/N]");
@@ -178,7 +178,7 @@ namespace Webhooks.GraphQL {
             } catch (OperationCanceledException) {
                 Log.Information("ProjectSyncer: Cancelled. Shutting down.");
             } catch (DisallowTunnelException) {
-                Log.Information("ProjectSyncer: Rejected use of the tunnel. Shutting down.");
+                Log.Information("ProjectSyncer: Rejected use of the third-party tunnel. Shutting down.");
             } catch (Exception ex) {
                 Log.Fatal("ProjectSyncer: Unexpected exception. Shutting down.\n{ex}", ex);
                 throw;
@@ -283,7 +283,7 @@ namespace Webhooks.GraphQL {
         }
 
         async Task<Uri> StartTunnel(Uri localAddress) {
-            if (UseTunnel) {
+            if (UseThirdPartyWebhookDevelopmentTunnel) {
                 var loggerFactory = new LoggerFactory().AddSerilog(Log.Logger);
 
                 using var client = new LocaltunnelClient(loggerFactory);

@@ -16,7 +16,7 @@ namespace Webhooks {
         public required string GraphQLEndpoint { get; set; }
 
         [JsonProperty]
-        public bool UseTunnel { get; set; }
+        public bool UseThirdPartyWebhookDevelopmentTunnel { get; set; }
 
         [JsonProperty(Required = Required.DisallowNull)]
         public required string[] Urls { get; set; }
