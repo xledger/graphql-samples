@@ -13,5 +13,14 @@ namespace Webhooks.DB {
         internal static SqliteParameter AddWithValue2(this SqliteParameterCollection @this, string paramName, object? value) {
             return @this.AddWithValue(paramName, value ?? Convert.DBNull);
         }
+
+        /// <summary>
+        /// Like plain .AddWithValue, except adds Convert.DbNull instead of null.
+        /// </summary>
+        internal static SqliteParameter AddWithValue2<T>(this SqliteParameterCollection @this, string paramName, T? value)
+            where T : struct
+        {
+            return @this.AddWithValue(paramName, value ?? Convert.DBNull);
+        }
     }
 }

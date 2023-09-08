@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Webhooks.Utils {
+﻿namespace Webhooks.Utils {
     static class Dates {
         const double OADateEpochInJulian = 2415018.5;
 

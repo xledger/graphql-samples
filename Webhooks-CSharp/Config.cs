@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Microsoft.AspNetCore.WebUtilities;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Webhooks {
     class Config {
@@ -19,6 +14,12 @@ namespace Webhooks {
 
         [JsonProperty(Required = Required.DisallowNull)]
         public required string GraphQLEndpoint { get; set; }
+
+        [JsonProperty]
+        public bool UseThirdPartyWebhookDevelopmentTunnel { get; set; }
+
+        [JsonProperty(Required = Required.DisallowNull)]
+        public required string[] Urls { get; set; }
 
         public static async Task<Config> FromJsonFile(string path) {
             var jsonSettings = new JsonSerializerSettings {
@@ -45,7 +46,26 @@ namespace Webhooks {
             if (string.IsNullOrWhiteSpace(GraphQLToken)) {
                 throw new ApplicationException("graphQLToken cannot be blank");
             }
+
+            var apiTokenBytes = WebEncoders.Base64UrlDecode(GraphQLToken);
+            var apiTokenBase64 = WebEncoders.Base64UrlEncode(apiTokenBytes);
+            if (GraphQLToken != apiTokenBase64) {
+                throw new ApplicationException("graphQLToken could not be successfully round-trip decoded and encoded in base64.");
+            }
+
+            if (Urls.Length < 1) {
+                throw new ApplicationException("At least one valid URL must be specified");
+            }
+            foreach (var url in Urls) {
+                try {
+                    var uri = new Uri(url);
+                    if (uri.Scheme != "http" && uri.Scheme != "https") {
+                        throw new ApplicationException("URL must be a valid HTTP or HTTPS address");
+                    }
+                } catch (Exception) {
+                    throw new ApplicationException("http must be a valid HTTP address");
+                }
+            }
         }
-        
     }
 }

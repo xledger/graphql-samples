@@ -1,5 +1,7 @@
 {
   "dbPath": "xl-webhook-example.db",
   "graphQlToken": "<my-token>",
-  "graphQlEndpoint": "https://www.xledger.net/graphql"
+  "graphQlEndpoint": "https://www.xledger.net/graphql",
+  "useThirdPartyWebhookDevelopmentTunnel": true,
+  "urls": ["https://localhost:9921", "http://localhost:9920"]
 }
