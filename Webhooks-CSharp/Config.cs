@@ -18,6 +18,9 @@ namespace Webhooks {
         [JsonProperty]
         public bool UseTunnel { get; set; }
 
+        [JsonProperty(Required = Required.DisallowNull)]
+        public required string[] Urls { get; set; }
+
         public static async Task<Config> FromJsonFile(string path) {
             var jsonSettings = new JsonSerializerSettings {
                 NullValueHandling = NullValueHandling.Include,
@@ -48,6 +51,20 @@ namespace Webhooks {
             var apiTokenBase64 = WebEncoders.Base64UrlEncode(apiTokenBytes);
             if (GraphQLToken != apiTokenBase64) {
                 throw new ApplicationException("graphQLToken could not be successfully round-trip decoded and encoded in base64.");
+            }
+
+            if (Urls.Length < 1) {
+                throw new ApplicationException("At least one valid URL must be specified");
+            }
+            foreach (var url in Urls) {
+                try {
+                    var uri = new Uri(url);
+                    if (uri.Scheme != "http" && uri.Scheme != "https") {
+                        throw new ApplicationException("URL must be a valid HTTP or HTTPS address");
+                    }
+                } catch (Exception) {
+                    throw new ApplicationException("http must be a valid HTTP address");
+                }
             }
         }
     }

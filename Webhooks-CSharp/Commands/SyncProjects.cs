@@ -17,7 +17,7 @@ namespace Webhooks.Commands {
 
             var cts = new CancellationTokenSource();
             var graphQLClient = new GraphQLClient(config.GraphQLToken, new Uri(config.GraphQLEndpoint));
-            var projectSyncer = new ProjectSyncer(db, graphQLClient, config.UseTunnel, cts.Token);
+            var projectSyncer = new ProjectSyncer(db, graphQLClient, config, cts.Token);
 
             await projectSyncer.Run();
 

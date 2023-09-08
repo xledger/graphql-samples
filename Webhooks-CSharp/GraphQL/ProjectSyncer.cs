@@ -17,9 +17,9 @@ using Webhooks.DB.Models;
 using Webhooks.DB;
 using Webhooks.Utils;
 
-using static Webhooks.GraphQL.WebServer;
-
 namespace Webhooks.GraphQL {
+    using WebhookRequest = WebServer.WebhookRequest;
+
     /// <summary>
     /// Sync projects by following this strategy:
     ///
@@ -103,14 +103,16 @@ namespace Webhooks.GraphQL {
         CancellationToken LinkedCancelTok { get; }
         GraphQLClient GraphQlClient { get; }
         AsyncRetryPolicy GraphQLRetryPolicy { get; }
+        string[] Urls { get; }
         bool UseTunnel { get; }
 
         internal ProjectSyncerState State { get; private set; }
 
-        internal ProjectSyncer(Database db, GraphQLClient graphQlClient, bool useTunnel, CancellationToken tok) {
+        internal ProjectSyncer(Database db, GraphQLClient graphQlClient, Config config, CancellationToken tok) {
             Db = db;
             GraphQlClient = graphQlClient;
-            UseTunnel = useTunnel;
+            Urls = config.Urls;
+            UseTunnel = config.UseTunnel;
             GraphQLRetryPolicy =
                 Policy.Handle<Exception>()
                 .WaitAndRetryAsync(
@@ -304,13 +306,13 @@ namespace Webhooks.GraphQL {
 
         async Task StartWebhookAsync(SyncStatus syncStatus) {
             // 1. Start listener.
-            _ = WebServer.Fly(PostProjectHandler(syncStatus), out var addrs, LinkedCancelTok);
+            _ = WebServer.Fly(PostProjectHandler(syncStatus), Urls, LinkedCancelTok);
 
             // 2. Start tunnel.
             // This step is only needed for local development. In a production
             // environment, the webhook event listener would be deployed to a
             // public URL and so no tunnel would be necessary or desirable.
-            var listenAddress = await StartTunnel(addrs.Https);
+            var listenAddress = await StartTunnel(new Uri(Urls[0]));
 
             // Note on steps 3 and 4:
             // Deleting the existing webhook is an artifact of the use of the
@@ -433,7 +435,7 @@ namespace Webhooks.GraphQL {
                 using var hmacAlgo = new HMACSHA256(apiTokenBytes);
                 var bytes = Encoding.UTF8.GetBytes($"{rq.Date.ToUnixTimeSeconds()}.{rq.Body}");
                 var calculatedBytes = hmacAlgo.ComputeHash(bytes);
-                
+
                 // Compare every byte to avoid timing attacks.
                 equal = CryptographicOperations.FixedTimeEquals(providedBytes, calculatedBytes);
 

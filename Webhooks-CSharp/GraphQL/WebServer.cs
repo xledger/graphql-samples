@@ -6,11 +6,6 @@ using Serilog;
 
 namespace Webhooks.GraphQL {
     static class WebServer {
-        internal static readonly int PORT = 9920;
-        internal static readonly int SECURE_PORT = PORT + 1;
-
-        public record Addresses(Uri Http, Uri Https);
-
         public record WebhookRequest(DateTimeOffset Date, string Signature, string Body);
 
         /// <summary>
@@ -19,16 +14,12 @@ namespace Webhooks.GraphQL {
         /// </summary>
         public static Task Fly(
             Func<WebhookRequest, Task<IResult>> handleProjectsMessage,
-            out Addresses addrs,
+            string[] urls,
             CancellationToken tok
         ) {
-            addrs = new Addresses(
-                new Uri($"http://localhost:{PORT}/"),
-                new Uri($"https://localhost:{SECURE_PORT}"));
-
             var builder = WebApplication.CreateBuilder();
             builder.Host.UseSerilog(Log.Logger);
-            builder.WebHost.UseUrls(addrs.Http.AbsoluteUri, addrs.Https.AbsoluteUri);
+            builder.WebHost.UseUrls(urls);
 
             var app = builder.Build();
             app.MapGet("/ping", () => Results.Json(new {
