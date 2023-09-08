@@ -114,10 +114,11 @@ namespace Webhooks.GraphQL {
         internal ProjectSyncer(Database db, GraphQLClient graphQlClient, Config config, CancellationToken tok) {
             Db = db;
             GraphQlClient = graphQlClient;
+            InternalCts = new();
             Urls = config.Urls;
             UseTunnel = config.UseTunnel;
             GraphQLRetryPolicy =
-                Policy.Handle<Exception>()
+                Policy.Handle<Exception>(ex => !InternalCts.IsCancellationRequested)
                 .WaitAndRetryAsync(
                     retryCount: 18, // More than enough to survive a large Xledger maintenance window
                     sleepDurationProvider: (i, ex, _ctx) => {
@@ -143,7 +144,6 @@ namespace Webhooks.GraphQL {
                     });
 
             State = ProjectSyncerState.NotStarted;
-            InternalCts = new();
             LinkedCancelTok = CancellationTokenSource.CreateLinkedTokenSource(InternalCts.Token, tok).Token;
             Console.CancelKeyPress += delegate {
                 InternalCts.Cancel();
@@ -207,13 +207,14 @@ namespace Webhooks.GraphQL {
             var shouldContinue = true;
             while (shouldContinue) {
                 Log.Verbose("Continuing after cursor {c}", nextCursor);
-                var result = await GraphQLRetryPolicy.ExecuteAsync(() =>
+                var result = await GraphQLRetryPolicy.ExecuteAsync((tok) =>
                     GraphQlClient.QueryAsync(
                         Queries.ProjectsFullSyncQuery,
                         nextCursor is null
                             ? null
                             : new Dictionary<string, object?> { ["after"] = nextCursor },
-                        LinkedCancelTok));
+                        tok),
+                    LinkedCancelTok);
 
                 var processResult = await ProcessQueryResults(result, syncStatus);
                 shouldContinue = processResult.ShouldContinue;
@@ -254,11 +255,12 @@ namespace Webhooks.GraphQL {
                 if (nextCursor is not null) {
                     variables["after"] = nextCursor;
                 }
-                var result = await GraphQLRetryPolicy.ExecuteAsync(() =>
+                var result = await GraphQLRetryPolicy.ExecuteAsync((tok) =>
                     GraphQlClient.QueryAsync(
                         Queries.ProjectsLatestChangesSyncQuery,
                         variables,
-                        LinkedCancelTok));
+                        tok),
+                    LinkedCancelTok);
 
                 var processResult = await ProcessQueryResults(result, syncStatus);
                 shouldContinue = processResult.ShouldContinue;
@@ -330,17 +332,18 @@ namespace Webhooks.GraphQL {
             // 3. If existing webhook, delete it.
             if (syncStatus.WebhookXledgerDbId is int webhookDbId) {
                 Log.Information("Deleting previous webhook {DbId}...", webhookDbId);
-                var result = await GraphQLRetryPolicy.ExecuteAsync(() =>
+                var result = await GraphQLRetryPolicy.ExecuteAsync((tok) =>
                     GraphQlClient.QueryAsync(
                         Queries.RemoveWebhookMutation,
                         new Dictionary<string, object?> { ["dbId"] = webhookDbId },
-                        LinkedCancelTok));
+                        tok),
+                    LinkedCancelTok);
             }
 
             // 4. Start new webhook.
             {
                 Log.Information("Starting webhook...");
-                var result = await GraphQLRetryPolicy.ExecuteAsync(() =>
+                var result = await GraphQLRetryPolicy.ExecuteAsync((tok) =>
                     GraphQlClient.QueryAsync(
                         Queries.RegisterWebhookMutation,
                         new Dictionary<string, object?> {
@@ -348,7 +351,8 @@ namespace Webhooks.GraphQL {
                             ["url"] = $"{listenAddress}projects",
                             ["serializedPayload"] = Queries.ProjectsSubscriptionJson,
                         },
-                        LinkedCancelTok));
+                        tok),
+                    LinkedCancelTok);
                 webhookDbId = result.SelectToken("$.data.addWebhooks.edges[0].node.dbId")!.ToObject<int>();
                 Log.Information("Webhook {DbId} created: {Response}", webhookDbId, result.ToString());
                 syncStatus.WebhookXledgerDbId = webhookDbId;
@@ -397,11 +401,12 @@ namespace Webhooks.GraphQL {
         async Task PollWebhookUntilStateOrFaulted(int webhookDbId, TimeSpan delay, params string[] states) {
             var pollUntilStates = new HashSet<string>(states);
             while (true) {
-                var result = await GraphQLRetryPolicy.ExecuteAsync(() =>
+                var result = await GraphQLRetryPolicy.ExecuteAsync((tok) =>
                     GraphQlClient.QueryAsync(
                         Queries.WebhookStateQuery,
                         new Dictionary<string, object?> { ["dbId"] = webhookDbId },
-                        LinkedCancelTok));
+                        tok),
+                    LinkedCancelTok);
                 var state = result.SelectToken("$.data.webhook.state.code")!.ToObject<string>();
                 if (state is null or "FAULTED") {
                     if (state is null) {
