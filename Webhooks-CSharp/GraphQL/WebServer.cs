@@ -32,7 +32,7 @@ namespace Webhooks.GraphQL {
                     [FromHeader(Name = "X-XL-Webhook-Signature")] string sig,
                     [FromHeader(Name = "Date")] DateTimeOffset date
                 ) => {
-                    Log.Information("Headers: {H}", request.Headers);
+                    Log.Debug("Headers: {H}", request.Headers);
                     using var r = new StreamReader(request.Body);
                     var body = await r.ReadToEndAsync();
                     var req = new WebhookRequest(date, sig, body);
