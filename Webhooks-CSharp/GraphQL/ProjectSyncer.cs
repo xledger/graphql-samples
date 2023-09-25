@@ -136,7 +136,7 @@ namespace Webhooks.GraphQL {
                             return TimeSpan.FromHours(2);
                         }
                     },
-                    onRetryAsync: (ex, _i, delay, _ctx) => {
+                    onRetryAsync: (ex, delay, _i, _ctx) => {
                         Log.Warning("ProjectSyncer GraphQL API exception. \"{m}\" Waiting {delay} to retry",
                             ex.Message,
                             delay);

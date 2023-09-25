@@ -39,13 +39,14 @@ namespace Webhooks.GraphQL {
             var respObject = Json.Deserialize<JObject>(jr)!;
 
             foreach (var err in respObject.SelectTokens("$.errors[*]")) {
-                var msg = err["message"]!.ToString();
+                var code = err["code"]?.ToString();
                 var errorKind = XledgerGraphQLErrorKind.Other;
-                if (msg.StartsWith("Too many requests in the last 5 seconds.")) {
+                if (code == "BAD_REQUEST.BURST_RATE_LIMIT_REACHED") {
                     errorKind = XledgerGraphQLErrorKind.ShortRateLimitReached;
-                } else if (msg.StartsWith("Insufficient credits.")) {
+                } else if (code == "BAD_REQUEST.INSUFFICIENT_CREDITS") {
                     errorKind = XledgerGraphQLErrorKind.InsufficientCredits;
                 }
+                var msg = err["message"]!.ToString();
                 var ex = new XledgerGraphQLException(errorKind, msg);
                 if (err["extensions"] is JObject extensions
                     && extensions.ToObject<Dictionary<string, object>>() is Dictionary<string, object> extensionData) {
