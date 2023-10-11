@@ -470,8 +470,8 @@ namespace Webhooks.GraphQL {
                     }
                     var jobj = Json.Deserialize<JObject>(req.Body)!;
                     var syncVersion = jobj.SelectTokens("$.data.projects.edges[*].syncVersion")
-                        .Select(t => t.ToObject<int>())
-                        .Max();
+                        .Select(t => t.ToObject<string>())
+                        .Last();
                     var batchRes = await ProcessQueryResults(jobj, syncStatus);
                     Log.Information("{TableName} sync up-to-date through {AsOf} (sync version {SyncVersion})",
                         syncStatus.TableName, syncStatus.AsOfTime, syncVersion);
