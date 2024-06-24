@@ -40,12 +40,14 @@ namespace Webhooks.GraphQL {
 
             foreach (var err in respObject.SelectTokens("$.errors[*]")) {
                 var code = err["code"]?.ToString();
-                var errorKind = XledgerGraphQLErrorKind.Other;
-                if (code == "BAD_REQUEST.BURST_RATE_LIMIT_REACHED") {
-                    errorKind = XledgerGraphQLErrorKind.ShortRateLimitReached;
-                } else if (code == "BAD_REQUEST.INSUFFICIENT_CREDITS") {
-                    errorKind = XledgerGraphQLErrorKind.InsufficientCredits;
-                }
+
+                var errorKind = code switch {
+                    "BAD_REQUEST.INSUFFICIENT_CREDITS" => XledgerGraphQLErrorKind.InsufficientCredits,
+                    "BAD_REQUEST.BURST_RATE_LIMIT_REACHED" => XledgerGraphQLErrorKind.ShortRateLimitReached,
+                    "BAD_REQUEST.CONCURRENCY_LIMIT_REACHED" => XledgerGraphQLErrorKind.ConcurrencyLimitReached,
+                    _ => XledgerGraphQLErrorKind.Other
+                };
+
                 var msg = err["message"]!.ToString();
                 var ex = new XledgerGraphQLException(errorKind, msg);
                 if (err["extensions"] is JObject extensions
@@ -64,7 +66,8 @@ namespace Webhooks.GraphQL {
     enum XledgerGraphQLErrorKind {
         Other = 0,
         ShortRateLimitReached = 1,
-        InsufficientCredits = 2
+        InsufficientCredits = 2,
+        ConcurrencyLimitReached = 3
     }
 
     class XledgerGraphQLException : ApplicationException {
