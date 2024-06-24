@@ -126,6 +126,7 @@ namespace Webhooks.GraphQL {
                             return xlEx.ErrorKind switch {
                                 XledgerGraphQLErrorKind.ShortRateLimitReached => TimeSpan.FromSeconds(5),
                                 XledgerGraphQLErrorKind.InsufficientCredits => TimeSpan.FromMinutes(20), // @TODO: Use extensions { resetAt } to get a precise delay
+                                XledgerGraphQLErrorKind.ConcurrencyLimitReached => TimeSpan.FromSeconds(1),
                                 _ => throw new ArgumentOutOfRangeException("xlEx.ErrorKind"), // Not possible
                             };
                         } else if (i <= 3) {
